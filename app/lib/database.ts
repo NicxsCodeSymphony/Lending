@@ -1,6 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 
 // Type definitions for our database entities
 export interface User {
@@ -68,8 +69,17 @@ export interface PaymentHistory {
   transaction_time: string;
 }
 
+// Check if we're in production (Vercel) or development
+const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+
+// Initialize Supabase client for production
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = isProduction ? createClient(supabaseUrl, supabaseKey) : null;
+
 let db: Database | null = null;
 
+// SQLite Database (Development)
 export async function getDatabase(): Promise<Database> {
   if (db) {
     return db;
@@ -82,6 +92,129 @@ export async function getDatabase(): Promise<Database> {
 
   await initializeTables();
   return db;
+}
+
+// Supabase Database (Production)
+async function initializeSupabaseTables(): Promise<void> {
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  try {
+    // Create user table - matches current SQLite structure
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS "user" (
+          account_id SERIAL PRIMARY KEY,
+          account_name TEXT NOT NULL,
+          username TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `
+    });
+
+    // Create customers table - matches current SQLite structure
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS customers (
+          customer_id SERIAL PRIMARY KEY,
+          first_name TEXT NOT NULL,
+          middle_name TEXT NOT NULL,
+          last_name TEXT NOT NULL,
+          contact TEXT NOT NULL,
+          address TEXT NOT NULL,
+          birthdate TEXT NOT NULL,
+          status TEXT DEFAULT 'Recently Added',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `
+    });
+
+    // Create loan table - matches current SQLite structure
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS loan (
+          loan_id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL,
+          loan_start DATE NOT NULL,
+          months INTEGER NOT NULL,
+          loan_end DATE NOT NULL,
+          transaction_date DATE NOT NULL,
+          loan_amount REAL NOT NULL,
+          interest REAL NOT NULL,
+          gross_receivable REAL NOT NULL,
+          payday_payment REAL NOT NULL,
+          service REAL NOT NULL,
+          balance REAL NOT NULL,
+          adjustment REAL NOT NULL,
+          overall_balance REAL NOT NULL,
+          penalty REAL DEFAULT 0,
+          status TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+        )
+      `
+    });
+
+    // Create receipt table - matches current SQLite structure
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS receipt (
+          pay_id SERIAL PRIMARY KEY,
+          loan_id INTEGER NOT NULL,
+          to_pay REAL NOT NULL,
+          original_to_pay REAL,
+          schedule TEXT NOT NULL,
+          amount REAL NOT NULL,
+          transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          status TEXT NOT NULL DEFAULT 'Not Paid',
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_loan FOREIGN KEY (loan_id) REFERENCES loan(loan_id) ON DELETE CASCADE
+        )
+      `
+    });
+
+    // Create payment_history table - matches current SQLite structure
+    await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS payment_history (
+          history_id SERIAL PRIMARY KEY,
+          loan_id INTEGER NOT NULL,
+          pay_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          payment_method TEXT NOT NULL,
+          notes TEXT NOT NULL,
+          transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_payment_loan FOREIGN KEY (loan_id) REFERENCES loan(loan_id) ON DELETE CASCADE,
+          CONSTRAINT fk_payment_receipt FOREIGN KEY (pay_id) REFERENCES receipt(pay_id) ON DELETE CASCADE
+        )
+      `
+    });
+
+    // Create default admin user if it doesn't exist
+    const { data: existingAdmin } = await supabase
+      .from('user')
+      .select('username')
+      .eq('username', 'admin')
+      .single();
+
+    if (!existingAdmin) {
+      await supabase
+        .from('user')
+        .insert([
+          { account_name: 'admin', username: 'admin', password: 'admin' }
+        ]);
+      console.log('✅ Default admin user created');
+    } else {
+      console.log('✅ Admin user already exists');
+    }
+  } catch (error) {
+    console.error('Error initializing Supabase tables:', error);
+    // If RPC doesn't work, we'll rely on manual table creation via Supabase dashboard
+    console.log('ℹ️ Please create tables manually in Supabase dashboard using the provided SQL script');
+  }
 }
 
 async function initializeTables(): Promise<void> {
@@ -184,11 +317,297 @@ async function initializeTables(): Promise<void> {
     );
     console.log('✅ Default admin user created');
   } else {
-    console.log('ℹ️  Admin user already exists');
+    console.log('✅ Admin user already exists');
   }
 }
 
-// Database service functions
+// Supabase Database Service
+export class SupabaseDatabaseService {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('user')
+      .select('*')
+      .eq('username', username)
+      .single();
+    
+    if (error) return undefined;
+    return data as User;
+  }
+
+  async createUser(userData: Omit<User, 'account_id' | 'created_at' | 'updated_at'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('user')
+      .insert([userData])
+      .select('account_id')
+      .single();
+    
+    if (error) throw error;
+    return data.account_id;
+  }
+
+  async getAllCustomers(): Promise<Customer[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data as Customer[];
+  }
+
+  async getCustomerById(customerId: number): Promise<Customer | undefined> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('customer_id', customerId)
+      .single();
+    
+    if (error) return undefined;
+    return data as Customer;
+  }
+
+  async createCustomer(customerData: Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .insert([customerData])
+      .select('customer_id')
+      .single();
+    
+    if (error) throw error;
+    return data.customer_id;
+  }
+
+  async updateCustomer(customerId: number, customerData: Partial<Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('customers')
+      .update({ ...customerData, updated_at: new Date().toISOString() })
+      .eq('customer_id', customerId);
+    
+    if (error) throw error;
+  }
+
+  async deleteCustomer(customerId: number): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('customer_id', customerId);
+    
+    if (error) throw error;
+  }
+
+  async getAllLoans(): Promise<Loan[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('loan')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data as Loan[];
+  }
+
+  async getLoanById(loanId: number): Promise<Loan | undefined> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('loan')
+      .select('*')
+      .eq('loan_id', loanId)
+      .single();
+    
+    if (error) return undefined;
+    return data as Loan;
+  }
+
+  async getLoansByCustomerId(customerId: number): Promise<Loan[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('loan')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data as Loan[];
+  }
+
+  async createLoan(loanData: Omit<Loan, 'loan_id' | 'created_at' | 'updated_at'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('loan')
+      .insert([loanData])
+      .select('loan_id')
+      .single();
+    
+    if (error) throw error;
+    return data.loan_id;
+  }
+
+  async updateLoan(loanId: number, loanData: Partial<Omit<Loan, 'loan_id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('loan')
+      .update({ ...loanData, updated_at: new Date().toISOString() })
+      .eq('loan_id', loanId);
+    
+    if (error) throw error;
+  }
+
+  async deleteLoan(loanId: number): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('loan')
+      .delete()
+      .eq('loan_id', loanId);
+    
+    if (error) throw error;
+  }
+
+  async getReceiptsByLoanId(loanId: number): Promise<Receipt[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('receipt')
+      .select('*')
+      .eq('loan_id', loanId)
+      .order('transaction_time', { ascending: true });
+    
+    if (error) throw error;
+    return data as Receipt[];
+  }
+
+  async createReceipt(receiptData: Omit<Receipt, 'pay_id' | 'transaction_time' | 'updated_at'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('receipt')
+      .insert([receiptData])
+      .select('pay_id')
+      .single();
+    
+    if (error) throw error;
+    return data.pay_id;
+  }
+
+  async updateReceipt(payId: number, receiptData: Partial<Omit<Receipt, 'pay_id' | 'transaction_time' | 'updated_at'>>): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('receipt')
+      .update({ ...receiptData, updated_at: new Date().toISOString() })
+      .eq('pay_id', payId);
+    
+    if (error) throw error;
+  }
+
+  async getAllReceipts(): Promise<Receipt[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('receipt')
+      .select('*')
+      .order('transaction_time', { ascending: false });
+    
+    if (error) throw error;
+    return data as Receipt[];
+  }
+
+  async deleteReceipt(payId: number): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('receipt')
+      .delete()
+      .eq('pay_id', payId);
+    
+    if (error) throw error;
+  }
+
+  async getPaymentHistoryByLoanId(loanId: number): Promise<PaymentHistory[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('payment_history')
+      .select('*')
+      .eq('loan_id', loanId)
+      .order('transaction_time', { ascending: false });
+    
+    if (error) throw error;
+    return data as PaymentHistory[];
+  }
+
+  async createPaymentHistory(paymentData: Omit<PaymentHistory, 'history_id' | 'transaction_time'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('payment_history')
+      .insert([paymentData])
+      .select('history_id')
+      .single();
+    
+    if (error) throw error;
+    return data.history_id;
+  }
+
+  async getAllPayments(): Promise<PaymentHistory[]> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('payment_history')
+      .select('*')
+      .order('transaction_time', { ascending: false });
+    
+    if (error) throw error;
+    return data as PaymentHistory[];
+  }
+
+  async getPaymentById(paymentId: number): Promise<PaymentHistory | undefined> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('payment_history')
+      .select('*')
+      .eq('history_id', paymentId)
+      .single();
+    
+    if (error) return undefined;
+    return data as PaymentHistory;
+  }
+
+  async createPayment(paymentData: Omit<PaymentHistory, 'history_id' | 'transaction_time'>): Promise<number> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { data, error } = await supabase
+      .from('payment_history')
+      .insert([paymentData])
+      .select('history_id')
+      .single();
+    
+    if (error) throw error;
+    return data.history_id;
+  }
+}
+
+// SQLite Database Service
 export class DatabaseService {
   private db: Database;
 
@@ -196,9 +615,8 @@ export class DatabaseService {
     this.db = database;
   }
 
-  // User operations
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return await this.db.get<User>('SELECT * FROM user WHERE username = ?', [username]);
+    return await this.db.get('SELECT * FROM user WHERE username = ?', [username]) as User | undefined;
   }
 
   async createUser(userData: Omit<User, 'account_id' | 'created_at' | 'updated_at'>): Promise<number> {
@@ -209,7 +627,6 @@ export class DatabaseService {
     return result.lastID!;
   }
 
-  // Customer operations
   async getAllCustomers(): Promise<Customer[]> {
     return await this.db.all('SELECT * FROM customers ORDER BY created_at DESC') as Customer[];
   }
@@ -347,7 +764,14 @@ export class DatabaseService {
   }
 }
 
-export async function getDatabaseService(): Promise<DatabaseService> {
-  const database = await getDatabase();
-  return new DatabaseService(database);
+export async function getDatabaseService(): Promise<DatabaseService | SupabaseDatabaseService> {
+  if (isProduction) {
+    // Initialize Supabase tables if they don't exist
+    await initializeSupabaseTables();
+    return new SupabaseDatabaseService();
+  } else {
+    // Use SQLite for development
+    const database = await getDatabase();
+    return new DatabaseService(database);
+  }
 } 

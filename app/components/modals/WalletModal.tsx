@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { X, Wallet, DollarSign, Calendar, CreditCard, FileText, Loader2, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import type { Loan } from '../../utils/DataType/Loans'
 import type { Receipts } from '../../utils/DataType/Receipt'
@@ -28,7 +28,7 @@ export default function WalletModal({ isOpen, onClose, onPaymentAdded, selectedL
   })
   const [errors, setErrors] = useState<{[key: string]: string}>({})
 
-  const fetchReceipts = async () => {
+  const fetchReceipts = useCallback(async () => {
     if (!selectedLoan) return
     
     try {
@@ -44,7 +44,7 @@ export default function WalletModal({ isOpen, onClose, onPaymentAdded, selectedL
     } finally {
       setLoadingReceipts(false)
     }
-  }
+  }, [selectedLoan?.loan_id]) // Only depend on the loan_id, not the entire object or showError
 
   // Load receipts when modal opens and loan is selected
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function WalletModal({ isOpen, onClose, onPaymentAdded, selectedL
       fetchReceipts()
       resetForm()
     }
-  }, [isOpen, selectedLoan, fetchReceipts])
+  }, [isOpen, selectedLoan?.loan_id, fetchReceipts])
 
   const resetForm = () => {
     setFormData({
