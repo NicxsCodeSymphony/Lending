@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseService } from '@/app/lib/database';
 
-interface RouteParams {
-  params: {
-    loanId: string;
-  };
-}
-
 // GET receipts by loan ID
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ loanId: string }> }
+) {
   try {
-    const loanId = parseInt(params.loanId);
+    const { loanId } = await params;
+    const loanIdNum = parseInt(loanId);
     
-    if (isNaN(loanId)) {
+    if (isNaN(loanIdNum)) {
       return NextResponse.json(
         { error: 'Invalid loan ID' },
         { status: 400 }
@@ -20,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const dbService = await getDatabaseService();
-    const receipts = await dbService.getReceiptsByLoanId(loanId);
+    const receipts = await dbService.getReceiptsByLoanId(loanIdNum);
     
     return NextResponse.json(receipts);
   } catch (error) {

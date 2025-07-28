@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseService } from '@/app/lib/database';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 // GET loan by ID
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const loanId = parseInt(params.id);
+    const { id } = await params;
+    const loanId = parseInt(id);
     
     if (isNaN(loanId)) {
       return NextResponse.json(
@@ -40,9 +38,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT update loan
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const loanId = parseInt(params.id);
+    const { id } = await params;
+    const loanId = parseInt(id);
     
     if (isNaN(loanId)) {
       return NextResponse.json(
