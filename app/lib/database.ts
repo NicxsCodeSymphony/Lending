@@ -211,11 +211,11 @@ export class DatabaseService {
 
   // Customer operations
   async getAllCustomers(): Promise<Customer[]> {
-    return await this.db.all<Customer>('SELECT * FROM customers ORDER BY created_at DESC');
+    return await this.db.all('SELECT * FROM customers ORDER BY created_at DESC') as Customer[];
   }
 
   async getCustomerById(customerId: number): Promise<Customer | undefined> {
-    return await this.db.get<Customer>('SELECT * FROM customers WHERE customer_id = ?', [customerId]);
+    return await this.db.get('SELECT * FROM customers WHERE customer_id = ?', [customerId.toString()]) as Customer | undefined;
   }
 
   async createCustomer(customerData: Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>): Promise<number> {
@@ -229,7 +229,7 @@ export class DatabaseService {
   async updateCustomer(customerId: number, customerData: Partial<Omit<Customer, 'customer_id' | 'created_at' | 'updated_at'>>): Promise<void> {
     const fields = Object.keys(customerData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(customerData);
-    values.push(customerId);
+    values.push(customerId.toString());
     
     await this.db.run(
       `UPDATE customers SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ?`,
@@ -238,20 +238,20 @@ export class DatabaseService {
   }
 
   async deleteCustomer(customerId: number): Promise<void> {
-    await this.db.run('DELETE FROM customers WHERE customer_id = ?', [customerId]);
+    await this.db.run('DELETE FROM customers WHERE customer_id = ?', [customerId.toString()]);
   }
 
   // Loan operations
   async getAllLoans(): Promise<Loan[]> {
-    return await this.db.all<Loan>('SELECT * FROM loan ORDER BY created_at DESC');
+      return await this.db.all('SELECT * FROM loan ORDER BY created_at DESC') as Loan[];
   }
 
   async getLoanById(loanId: number): Promise<Loan | undefined> {
-    return await this.db.get<Loan>('SELECT * FROM loan WHERE loan_id = ?', [loanId]);
+    return await this.db.get('SELECT * FROM loan WHERE loan_id = ?', [loanId.toString()]) as Loan | undefined;
   }
 
   async getLoansByCustomerId(customerId: number): Promise<Loan[]> {
-    return await this.db.all<Loan>('SELECT * FROM loan WHERE customer_id = ? ORDER BY created_at DESC', [customerId]);
+    return await this.db.all('SELECT * FROM loan WHERE customer_id = ? ORDER BY created_at DESC', [customerId.toString()]) as Loan[];
   }
 
   async createLoan(loanData: Omit<Loan, 'loan_id' | 'created_at' | 'updated_at'>): Promise<number> {
@@ -273,7 +273,7 @@ export class DatabaseService {
   async updateLoan(loanId: number, loanData: Partial<Omit<Loan, 'loan_id' | 'created_at' | 'updated_at'>>): Promise<void> {
     const fields = Object.keys(loanData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(loanData);
-    values.push(loanId);
+    values.push(loanId.toString());
     
     await this.db.run(
       `UPDATE loan SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE loan_id = ?`,
@@ -283,7 +283,7 @@ export class DatabaseService {
 
   // Receipt operations
   async getReceiptsByLoanId(loanId: number): Promise<Receipt[]> {
-    return await this.db.all<Receipt>('SELECT * FROM receipt WHERE loan_id = ? ORDER BY transaction_time', [loanId]);
+    return await this.db.all('SELECT * FROM receipt WHERE loan_id = ? ORDER BY transaction_time', [loanId.toString()]) as Receipt[];  
   }
 
   async createReceipt(receiptData: Omit<Receipt, 'pay_id' | 'transaction_time' | 'updated_at'>): Promise<number> {
@@ -297,7 +297,7 @@ export class DatabaseService {
   async updateReceipt(payId: number, receiptData: Partial<Omit<Receipt, 'pay_id' | 'transaction_time' | 'updated_at'>>): Promise<void> {
     const fields = Object.keys(receiptData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(receiptData);
-    values.push(payId);
+    values.push(payId.toString());
     
     await this.db.run(
       `UPDATE receipt SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE pay_id = ?`,
@@ -307,7 +307,7 @@ export class DatabaseService {
 
   // Payment History operations
   async getPaymentHistoryByLoanId(loanId: number): Promise<PaymentHistory[]> {
-    return await this.db.all<PaymentHistory>('SELECT * FROM payment_history WHERE loan_id = ? ORDER BY transaction_time DESC', [loanId]);
+    return await this.db.all('SELECT * FROM payment_history WHERE loan_id = ? ORDER BY transaction_time DESC', [loanId.toString()]) as PaymentHistory[];  
   }
 
   async createPaymentHistory(paymentData: Omit<PaymentHistory, 'history_id' | 'transaction_time'>): Promise<number> {

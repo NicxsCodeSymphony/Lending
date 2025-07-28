@@ -316,10 +316,10 @@ export default function Lending() {
       const docWithTable = doc as { lastAutoTable?: { finalY: number } }
       const finalY = (docWithTable.lastAutoTable?.finalY || 100) + 15
       doc.setFontSize(12)
-      doc.setFont(undefined, 'bold')
+      doc.setFont('helvetica', 'bold')
       doc.text('SUMMARY', 20, finalY)
       
-      doc.setFont(undefined, 'normal')
+      doc.setFont('helvetica', 'normal')
       doc.setFontSize(10)
       const totalLoaned = reportLoans.reduce((sum, loan) => sum + loan.loan_amount, 0)
       const totalReceivable = reportLoans.reduce((sum, loan) => sum + loan.notes_receivable, 0)
