@@ -40,29 +40,6 @@ export default function AddLoanModal({ isOpen, onClose, onLoanAdded }: AddLoanMo
   })
   const [errors, setErrors] = useState<AddLoanErrors>({})
 
-  // Load customers and set start date when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchCustomers()
-      // Set start date to today automatically
-      const today = new Date().toISOString().split('T')[0]
-      setFormData(prev => ({ ...prev, start_date: today }))
-    }
-  }, [isOpen])
-
-  // Calculate due date when start date or terms change
-  useEffect(() => {
-    if (formData.start_date && formData.terms_months) {
-      const startDate = new Date(formData.start_date)
-      const dueDate = new Date(startDate)
-      dueDate.setMonth(dueDate.getMonth() + formData.terms_months)
-      setFormData(prev => ({ 
-        ...prev, 
-        due_date: dueDate.toISOString().split('T')[0] 
-      }))
-    }
-  }, [formData.start_date, formData.terms_months])
-
   const fetchCustomers = useCallback(async () => {
     try {
       setLoadingCustomers(true)
@@ -82,6 +59,29 @@ export default function AddLoanModal({ isOpen, onClose, onLoanAdded }: AddLoanMo
       setLoadingCustomers(false)
     }
   }, [showError])
+
+  // Load customers and set start date when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchCustomers()
+      // Set start date to today automatically
+      const today = new Date().toISOString().split('T')[0]
+      setFormData(prev => ({ ...prev, start_date: today }))
+    }
+  }, [isOpen, fetchCustomers])
+
+  // Calculate due date when start date or terms change
+  useEffect(() => {
+    if (formData.start_date && formData.terms_months) {
+      const startDate = new Date(formData.start_date)
+      const dueDate = new Date(startDate)
+      dueDate.setMonth(dueDate.getMonth() + formData.terms_months)
+      setFormData(prev => ({ 
+        ...prev, 
+        due_date: dueDate.toISOString().split('T')[0] 
+      }))
+    }
+  }, [formData.start_date, formData.terms_months])
 
   const resetForm = () => {
     const today = new Date().toISOString().split('T')[0]

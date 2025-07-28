@@ -19,8 +19,17 @@ export async function GET(
 
     const dbService = await getDatabaseService();
     const loans = await dbService.getLoansByCustomerId(customerIdNum);
+    const customer = await dbService.getCustomerById(customerIdNum);
     
-    return NextResponse.json(loans);
+    // Add customer data to each loan
+    const loansWithCustomer = loans.map(loan => ({
+      ...loan,
+      first_name: customer?.first_name || '',
+      middle_name: customer?.middle_name || '',
+      last_name: customer?.last_name || ''
+    }));
+    
+    return NextResponse.json(loansWithCustomer);
   } catch (error) {
     console.error('Error fetching customer loans:', error);
     return NextResponse.json(

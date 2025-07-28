@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { X, User, Phone, MapPin, Calendar, Loader2, Settings } from 'lucide-react'
-import { editCustomer } from '../../utils/DataType/CustomerServer'
+import { updateCustomer } from '../../utils/DataType/CustomerServer'
 import type { Customer, EditCustomer } from '../../utils/DataType/Customers'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -113,11 +113,14 @@ export default function EditCustomerModal({ isOpen, onClose, onCustomerUpdated, 
 
     try {
       setLoading(true)
+      if (!customer) {
+        throw new Error('No customer selected')
+      }
       const editData: EditCustomer = {
         ...formData,
         updated_at: new Date().toISOString()
       }
-      await editCustomer(editData)
+      await updateCustomer(customer.customer_id, editData)
       showSuccess('Customer Updated', `${formData.first_name} ${formData.last_name} has been successfully updated.`)
       onCustomerUpdated()
       handleClose()

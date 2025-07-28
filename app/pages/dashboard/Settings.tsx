@@ -130,7 +130,7 @@ export default function Settings() {
       // Call the real API to change password
       await changePassword({
         username: user.username,
-        currentPassword: passwordForm.currentPassword,
+        oldPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword
       })
       

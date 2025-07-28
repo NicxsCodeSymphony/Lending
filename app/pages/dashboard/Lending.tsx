@@ -2,7 +2,7 @@
 
 import {useState, useEffect } from 'react'
 import { DollarSign, Plus, Search, TrendingUp, AlertTriangle, CheckCircle, Clock, XCircle, Edit, Trash2, Loader2, AlertCircle, ChevronLeft, ChevronRight, Wallet, AlertOctagon, FileText, Download } from 'lucide-react'
-import { getLoans, deleteLoan, getLoanStats, recalculateAllLoanBalances } from '../../utils/DataType/LoanServer'
+import { getLoans, deleteLoan, getLoanStats } from '../../utils/DataType/LoanServer'
 import { getCustomers } from '../../utils/DataType/CustomerServer'
 import { fetchReceipt } from '../../utils/DataType/ReceiptServer'
 import type { Loan, LoanStats } from '../../utils/DataType/Loans'
@@ -59,7 +59,6 @@ export default function Lending() {
       setError(null)
       
       // First recalculate balances to ensure data is up-to-date
-      await recalculateAllLoanBalances()
       
       const [loansData, statsData, customersData, receiptsData] = await Promise.all([
         getLoans(),
@@ -131,6 +130,36 @@ export default function Lending() {
 
   const handlePaymentAdded = () => {
     fetchData() // Refresh loans and stats after payment is added
+  }
+
+  const handleSyncBalances = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/loans/sync-balances', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to sync balances')
+      }
+      
+      const result = await response.json()
+      showSuccess('Balances Synced', result.message)
+      
+      // Refresh data after sync
+      await fetchData()
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        showError('Sync Failed', err.message)
+      } else {
+        showError('Sync Failed', 'Failed to sync loan balances')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getReportData = () => {
@@ -473,25 +502,12 @@ export default function Lending() {
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <button 
-            onClick={async () => {
-              try {
-                setLoading(true)
-                await recalculateAllLoanBalances()
-                await fetchData()
-                showSuccess('Balances Updated', 'All loan balances have been recalculated based on payments.')
-              } catch (err: unknown) {
-                if (err instanceof Error) {
-                  showError('Recalculation Failed', err.message)
-                } else {
-                  showError('Recalculation Failed', 'Failed to recalculate balances')
-                }
-              }
-            }}
+            onClick={handleSyncBalances}
             disabled={loading}
             className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-            <span>Refresh Balances</span>
+            <span>Sync Balances</span>
           </button>
           <button 
             onClick={() => setIsReportModalOpen(true)}

@@ -3,10 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run dev:full",
-    "dev:full": "start /B npm run dev:next & npm run dev:server",
-    "dev:next": "next dev --turbopack",
-    "dev:server": "cd app/server && npm start",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

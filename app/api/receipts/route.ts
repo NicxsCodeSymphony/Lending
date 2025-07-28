@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseService } from '@/app/lib/database';
 
+// GET all receipts
+export async function GET() {
+  try {
+    const dbService = await getDatabaseService();
+    const receipts = await dbService.getAllReceipts();
+    
+    return NextResponse.json(receipts);
+  } catch (error) {
+    console.error('Error fetching receipts:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 // POST create new receipt
 export async function POST(request: NextRequest) {
   try {

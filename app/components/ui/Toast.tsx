@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
@@ -61,6 +61,13 @@ export default function Toast({ toast, onRemove }: ToastProps) {
   const Icon = config.icon
   const duration = toast.duration || 4000
 
+  const handleDismiss = useCallback(() => {
+    setIsExiting(true)
+    setTimeout(() => {
+      onRemove(toast.id)
+    }, 300) // Wait for exit animation
+  }, [onRemove, toast.id])
+
   useEffect(() => {
     // Show animation
     const showTimer = setTimeout(() => setIsVisible(true), 10)
@@ -74,14 +81,7 @@ export default function Toast({ toast, onRemove }: ToastProps) {
       clearTimeout(showTimer)
       clearTimeout(dismissTimer)
     }
-  }, [duration])
-
-  const handleDismiss = () => {
-    setIsExiting(true)
-    setTimeout(() => {
-      onRemove(toast.id)
-    }, 300) // Wait for exit animation
-  }
+  }, [duration, handleDismiss])
 
   return (
     <div

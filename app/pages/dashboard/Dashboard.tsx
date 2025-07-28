@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart3, TrendingUp, Users, DollarSign, AlertCircle, RefreshCw } from 'lucide-react'
 import MonthlyTrendsChart from '../../components/charts/MonthlyTrendsChart'
-import { getDashboardData, getSystemStatus } from '../../utils/DataType/DashboardServer'
+import { getDashboardStats, getSystemStatus } from '../../utils/DataType/DashboardServer'
 import type { DashboardStats, SystemStatus } from '../../utils/DataType/DashboardServer'
 import { useSettings } from '../../contexts/SettingsContext'
 
@@ -15,13 +15,13 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [timeFilter, setTimeFilter] = useState<'month' | 'week' | 'day'>('month')
 
-  const fetchDashboardData = async (filter: 'month' | 'week' | 'day' = timeFilter) => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true)
       setError(null)
       
       const [data, status] = await Promise.all([
-        getDashboardData(filter),
+        getDashboardStats(),
         getSystemStatus()
       ])
 
@@ -39,7 +39,7 @@ export default function Dashboard() {
 
   const handleFilterChange = (filter: 'month' | 'week' | 'day') => {
     setTimeFilter(filter)
-    fetchDashboardData(filter)
+    fetchDashboardData()
   }
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export default function Dashboard() {
               Cannot connect to server
             </p>
             <p className="text-red-600 text-sm mb-3">
-              {error || 'Please make sure the server is running on http://localhost:45632'}
+              {error || 'Please make sure the API server is running'}
             </p>
             <button 
               onClick={() => fetchDashboardData()}

@@ -5,7 +5,7 @@ import { X, AlertOctagon, DollarSign, Calendar, FileText, Search, Loader2 } from
 import { getLoans } from '../../utils/DataType/LoanServer'
 import type { Loan } from '../../utils/DataType/Loans'
 import { useToast } from '../../contexts/ToastContext'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
 interface PenaltyModalProps {
   isOpen: boolean
@@ -42,26 +42,6 @@ export default function PenaltyModal({ isOpen, onClose, onPenaltyAdded, selected
   })
   const [errors, setErrors] = useState<PenaltyFormErrors>({})
 
-  // Load loans when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchLoans()
-      // Set transaction date to today
-      const today = new Date().toISOString().split('T')[0]
-      setFormData(prev => ({ ...prev, transaction_date: today }))
-    }
-  }, [isOpen])
-
-  // Pre-select loan when selectedLoan is provided
-  useEffect(() => {
-    if (selectedLoan && isOpen) {
-      setFormData(prev => ({ 
-        ...prev, 
-        loan_id: selectedLoan.loan_id 
-      }))
-    }
-  }, [selectedLoan, isOpen])
-
   const fetchLoans = async () => {
     try {
       setLoadingLoans(true)
@@ -83,6 +63,26 @@ export default function PenaltyModal({ isOpen, onClose, onPenaltyAdded, selected
       setLoadingLoans(false)
     }
   }
+
+  // Load loans when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchLoans()
+      // Set transaction date to today
+      const today = new Date().toISOString().split('T')[0]
+      setFormData(prev => ({ ...prev, transaction_date: today }))
+    }
+  }, [isOpen, fetchLoans])
+
+  // Pre-select loan when selectedLoan is provided
+  useEffect(() => {
+    if (selectedLoan && isOpen) {
+      setFormData(prev => ({ 
+        ...prev, 
+        loan_id: selectedLoan.loan_id 
+      }))
+    }
+  }, [selectedLoan, isOpen])
 
   const resetForm = () => {
     const today = new Date().toISOString().split('T')[0]
@@ -139,7 +139,7 @@ export default function PenaltyModal({ isOpen, onClose, onPenaltyAdded, selected
       setLoading(true)
       
       // Call the penalty endpoint
-      await axios.put('http://localhost:45632/loan/addPenalty', {
+              await axios.put('/api/loans/addPenalty', {
         loan_id: formData.loan_id,
         penalty_amount: formData.penalty_amount,
         reason: formData.reason,
@@ -159,11 +159,26 @@ export default function PenaltyModal({ isOpen, onClose, onPenaltyAdded, selected
       onPenaltyAdded()
       handleClose()
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        showError('Penalty Failed', err.message)
-      } else {
-        showError('Penalty Failed', 'Failed to add penalty')
+      let errorMessage = 'Failed to add penalty'
+      
+      if (err instanceof AxiosError) {
+        // Handle axios errors with response data
+        if (err.response?.data?.error) {
+          errorMessage = err.response.data.error
+        } else if (err.response?.status === 400) {
+          errorMessage = 'Invalid request data'
+        } else if (err.response?.status === 404) {
+          errorMessage = 'Loan not found'
+        } else if (err.response?.status === 500) {
+          errorMessage = 'Server error occurred'
+        } else {
+          errorMessage = err.message || 'Network error occurred'
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message
       }
+      
+      showError('Penalty Failed', errorMessage)
     } finally {
       setLoading(false)
     }

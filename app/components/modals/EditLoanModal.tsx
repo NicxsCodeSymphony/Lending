@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { X, DollarSign, Calendar, User, Percent, Clock, Loader2, Settings } from 'lucide-react'
-import { editLoan } from '../../utils/DataType/LoanServer'
+import { updateLoan } from '../../utils/DataType/LoanServer'
 import { getCustomers } from '../../utils/DataType/CustomerServer'
 import type { Loan, EditLoan } from '../../utils/DataType/Loans'
 import type { Customer } from '../../utils/DataType/Customers'
@@ -33,12 +33,29 @@ export default function EditLoanModal({ isOpen, onClose, onLoanUpdated, loan }: 
   })
   const [errors, setErrors] = useState<{[key: string]: string}>({})
 
+  const fetchCustomers = useCallback(async () => {
+    try {
+      setLoadingCustomers(true)
+      const customerData = await getCustomers()
+      // Include all customers (including deleted ones) for editing purposes
+      setCustomers(customerData)
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        showError('Error Loading Customers', err.message)
+      } else {
+        showError('Error Loading Customers', 'Failed to load customer list')
+      }
+    } finally {
+      setLoadingCustomers(false)
+    }
+  }, [showError])
+
   // Load customers when modal opens
   useEffect(() => {
     if (isOpen) {
       fetchCustomers()
     }
-  }, [isOpen])
+  }, [isOpen, fetchCustomers])
 
   // Pre-fill form when loan changes
   useEffect(() => {
@@ -70,23 +87,6 @@ export default function EditLoanModal({ isOpen, onClose, onLoanUpdated, loan }: 
       }))
     }
   }, [formData.start_date, formData.terms_months, loan])
-
-  const fetchCustomers = useCallback(async () => {
-    try {
-      setLoadingCustomers(true)
-      const customerData = await getCustomers()
-      // Include all customers (including deleted ones) for editing purposes
-      setCustomers(customerData)
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        showError('Error Loading Customers', err.message)
-      } else {
-        showError('Error Loading Customers', 'Failed to load customer list')
-      }
-    } finally {
-      setLoadingCustomers(false)
-    }
-  }, [showError])
 
   const resetForm = () => {
     setFormData({
@@ -162,7 +162,7 @@ export default function EditLoanModal({ isOpen, onClose, onLoanUpdated, loan }: 
         ...formData,
         updated_at: new Date().toISOString()
       }
-      await editLoan(editData)
+      await updateLoan(formData.loan_id, editData)
       const selectedCustomer = customers.find(c => c.customer_id === formData.customer_id)
       const customerName = selectedCustomer 
         ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}`

@@ -281,6 +281,10 @@ export class DatabaseService {
     );
   }
 
+  async deleteLoan(loanId: number): Promise<void> {
+    await this.db.run('DELETE FROM loan WHERE loan_id = ?', [loanId.toString()]);
+  }
+
   // Receipt operations
   async getReceiptsByLoanId(loanId: number): Promise<Receipt[]> {
     return await this.db.all('SELECT * FROM receipt WHERE loan_id = ? ORDER BY transaction_time', [loanId.toString()]) as Receipt[];  
@@ -305,12 +309,36 @@ export class DatabaseService {
     );
   }
 
+  async getAllReceipts(): Promise<Receipt[]> {
+    return await this.db.all('SELECT * FROM receipt ORDER BY transaction_time DESC') as Receipt[];
+  }
+
+  async deleteReceipt(payId: number): Promise<void> {
+    await this.db.run('DELETE FROM receipt WHERE pay_id = ?', [payId.toString()]);
+  }
+
   // Payment History operations
   async getPaymentHistoryByLoanId(loanId: number): Promise<PaymentHistory[]> {
     return await this.db.all('SELECT * FROM payment_history WHERE loan_id = ? ORDER BY transaction_time DESC', [loanId.toString()]) as PaymentHistory[];  
   }
 
   async createPaymentHistory(paymentData: Omit<PaymentHistory, 'history_id' | 'transaction_time'>): Promise<number> {
+    const result = await this.db.run(
+      'INSERT INTO payment_history (loan_id, pay_id, amount, payment_method, notes) VALUES (?, ?, ?, ?, ?)',
+      [paymentData.loan_id, paymentData.pay_id, paymentData.amount, paymentData.payment_method, paymentData.notes]
+    );
+    return result.lastID!;
+  }
+
+  async getAllPayments(): Promise<PaymentHistory[]> {
+    return await this.db.all('SELECT * FROM payment_history ORDER BY transaction_time DESC') as PaymentHistory[];
+  }
+
+  async getPaymentById(paymentId: number): Promise<PaymentHistory | undefined> {
+    return await this.db.get('SELECT * FROM payment_history WHERE history_id = ?', [paymentId.toString()]) as PaymentHistory | undefined;
+  }
+
+  async createPayment(paymentData: Omit<PaymentHistory, 'history_id' | 'transaction_time'>): Promise<number> {
     const result = await this.db.run(
       'INSERT INTO payment_history (loan_id, pay_id, amount, payment_method, notes) VALUES (?, ?, ?, ?, ?)',
       [paymentData.loan_id, paymentData.pay_id, paymentData.amount, paymentData.payment_method, paymentData.notes]

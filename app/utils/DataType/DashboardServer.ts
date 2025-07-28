@@ -4,8 +4,9 @@ import { getCustomers } from './CustomerServer'
 import { fetchReceipt } from './ReceiptServer'
 import type { Loan } from './Loans'
 import type { Receipts } from './Receipt'
+import type { Customer } from './Customers'
 
-const url = "http://localhost:45632"
+const url = "/api"
 
 export interface DashboardStats {
   // Financial Stats
@@ -36,247 +37,123 @@ export interface DashboardStats {
 }
 
 export interface MonthlyTrend {
-  period: string // Can be month, week, or day
-  year: number
-  loans_disbursed: number
-  amount_disbursed: number
-  collections: number
-  outstanding: number
+  month: string
+  loans_amount: number
+  payments_collected: number
+  new_customers: number
 }
 
 export interface SystemStatus {
   database_connected: boolean
-  api_status: 'online' | 'offline' | 'error'
+  api_status: 'online' | 'error' | 'offline'
   last_sync: string
 }
 
-export const getDashboardData = async (timeFilter: 'month' | 'week' | 'day' = 'month'): Promise<DashboardStats> => {
+export const getDashboardStats = async (): Promise<DashboardStats> => {
   try {
-    // Fetch all required data in parallel
+    // Fetch all data in parallel
     const [loans, customers, receipts] = await Promise.all([
       getLoans(),
       getCustomers(),
       fetchReceipt()
     ])
 
-    // Calculate financial statistics
-    const totalLoansAmount = loans.reduce((sum, loan) => sum + loan.loan_amount, 0)
-    const totalInterestEarned = loans.reduce((sum, loan) => sum + loan.interest_amount, 0)
-    const totalOutstanding = loans.reduce((sum, loan) => sum + (loan.balance || 0), 0)
-    const totalPenalties = loans.reduce((sum, loan) => sum + loan.penalty, 0)
-    
-    // Calculate total collected directly from actual payments (receipts)
-    const totalCollected = receipts.reduce((sum, receipt) => {
-      return sum + (receipt.amount || 0)
+    // Calculate financial stats
+    const total_loans_amount = loans.reduce((sum, loan) => sum + loan.loan_amount, 0)
+    const total_interest_earned = loans.reduce((sum, loan) => sum + loan.interest_amount, 0)
+    const total_outstanding = loans.reduce((sum, loan) => {
+      // Completed loans should have 0 balance
+      const effectiveBalance = loan.status.toLowerCase() === 'completed' ? 0 : loan.balance
+      return sum + effectiveBalance
     }, 0)
-    
-    const totalExpected = totalLoansAmount + totalInterestEarned
-    const collectionRate = totalExpected > 0 ? (totalCollected / totalExpected) * 100 : 0
+    const total_penalties = loans.reduce((sum, loan) => sum + loan.penalty, 0)
+    const total_collected = total_loans_amount + total_interest_earned - total_outstanding
+    const collection_rate = (total_loans_amount + total_interest_earned) > 0 
+      ? (total_collected / (total_loans_amount + total_interest_earned)) * 100 
+      : 0
 
-    // Calculate loan statistics
-    const totalLoans = loans.length
-    const activeLoans = loans.filter(l => ['active', 'partial'].includes(l.status.toLowerCase())).length
-    const completedLoans = loans.filter(l => l.status.toLowerCase() === 'completed').length
-    const overdueLoans = loans.filter(l => l.status.toLowerCase() === 'overdue').length
-    const pendingLoans = loans.filter(l => l.status.toLowerCase() === 'pending').length
+    // Calculate loan stats
+    const total_loans = loans.length
+    const active_loans = loans.filter(l => l.status.toLowerCase() === 'active').length
+    const completed_loans = loans.filter(l => l.status.toLowerCase() === 'completed').length
+    const overdue_loans = loans.filter(l => l.status.toLowerCase() === 'overdue').length
+    const pending_loans = loans.filter(l => l.status.toLowerCase() === 'pending').length
 
-    // Calculate customer statistics
-    const activeCustomers = customers.filter(c => c.status.toLowerCase() !== 'deleted')
-    const totalCustomers = activeCustomers.length
-    const activeCustomersCount = activeCustomers.filter(c => c.status.toLowerCase() === 'active').length
+    // Calculate customer stats
+    const total_customers = customers.length
+    const active_customers = customers.filter(c => c.status.toLowerCase() === 'active').length
 
-    // Get recent activity (last 5 loans and payments)
-    const recentLoans = loans
+    // Get recent activity (last 5 items)
+    const recent_loans = loans
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5)
 
-    const recentPayments = receipts
-      .filter(r => r.amount > 0)
+    const recent_payments = receipts
       .sort((a, b) => new Date(b.transaction_time).getTime() - new Date(a.transaction_time).getTime())
       .slice(0, 5)
 
-    // Generate trends based on the selected time filter
-    const monthlyTrends = generateTrends(loans, receipts, timeFilter)
+    // Calculate monthly trends (last 6 months)
+    const monthly_trends = calculateMonthlyTrends(loans, receipts, customers)
 
     return {
-      total_loans_amount: totalLoansAmount,
-      total_interest_earned: totalInterestEarned,
-      total_collected: totalCollected,
-      total_outstanding: totalOutstanding,
-      total_penalties: totalPenalties,
-      collection_rate: collectionRate,
-      total_loans: totalLoans,
-      active_loans: activeLoans,
-      completed_loans: completedLoans,
-      overdue_loans: overdueLoans,
-      pending_loans: pendingLoans,
-      total_customers: totalCustomers,
-      active_customers: activeCustomersCount,
-      recent_loans: recentLoans,
-      recent_payments: recentPayments,
-      monthly_trends: monthlyTrends
+      total_loans_amount,
+      total_interest_earned,
+      total_collected,
+      total_outstanding,
+      total_penalties,
+      collection_rate,
+      total_loans,
+      active_loans,
+      completed_loans,
+      overdue_loans,
+      pending_loans,
+      total_customers,
+      active_customers,
+      recent_loans,
+      recent_payments,
+      monthly_trends
     }
-  } catch (err) {
-    console.error("Failed to fetch dashboard data: ", err)
-    throw err
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error)
+    throw error
   }
 }
 
-const generateTrends = (loans: Loan[], receipts: Receipts[], timeFilter: 'month' | 'week' | 'day'): MonthlyTrend[] => {
-  switch (timeFilter) {
-    case 'day':
-      return generateDailyTrends(loans, receipts)
-    case 'week':
-      return generateWeeklyTrends(loans, receipts)
-    case 'month':
-    default:
-      return generateMonthlyTrends(loans, receipts)
-  }
-}
-
-const generateMonthlyTrends = (loans: Loan[], receipts: Receipts[]): MonthlyTrend[] => {
+const calculateMonthlyTrends = (loans: Loan[], receipts: Receipts[], customers: Customer[]): MonthlyTrend[] => {
   const trends: MonthlyTrend[] = []
   const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1 // 1-12
   
-  // Generate data from January of this year to current month
-  for (let monthNum = 1; monthNum <= currentMonth; monthNum++) {
-    const targetDate = new Date(currentYear, monthNum - 1, 1)
-    const month = targetDate.toLocaleDateString('en-US', { month: 'short' })
-
-    // Calculate loans disbursed in this month
-    const monthLoans = loans.filter(loan => {
-      const loanDate = new Date(loan.start_date)
-      return loanDate.getFullYear() === currentYear && 
-             loanDate.getMonth() + 1 === monthNum
-    })
-
-    const loansDisbursed = monthLoans.length
-    const amountDisbursed = monthLoans.reduce((sum, loan) => sum + loan.loan_amount, 0)
-
-    // Calculate collections in this month
-    const monthPayments = receipts.filter(receipt => {
-      const paymentDate = new Date(receipt.transaction_time)
-      return paymentDate.getFullYear() === currentYear && 
-             paymentDate.getMonth() + 1 === monthNum &&
-             receipt.amount > 0
-    })
-
-    const collections = monthPayments.reduce((sum, payment) => sum + payment.amount, 0)
-
-    // Calculate outstanding at end of month (simplified - current outstanding for latest month)
-    const outstanding = monthNum === currentMonth ? loans.reduce((sum, loan) => sum + (loan.balance || 0), 0) : 0
-
-    trends.push({
-      period: month,
-      year: currentYear,
-      loans_disbursed: loansDisbursed,
-      amount_disbursed: amountDisbursed,
-      collections,
-      outstanding
-    })
-  }
-
-  return trends
-}
-
-const generateWeeklyTrends = (loans: Loan[], receipts: Receipts[]): MonthlyTrend[] => {
-  const trends: MonthlyTrend[] = []
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  
-  // Generate data for the past 12 weeks
-  for (let i = 11; i >= 0; i--) {
-    const weekStart = new Date()
-    weekStart.setDate(weekStart.getDate() - (i * 7) - weekStart.getDay()) // Start of week (Sunday)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekEnd.getDate() + 6) // End of week (Saturday)
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const monthKey = date.toISOString().slice(0, 7) // YYYY-MM format
     
-    const weekLabel = `Week ${Math.ceil((weekStart.getDate() + weekStart.getDay()) / 7)} ${weekStart.toLocaleDateString('en-US', { month: 'short' })}`
-
-    // Calculate loans disbursed in this week
-    const weekLoans = loans.filter(loan => {
-      const loanDate = new Date(loan.start_date)
-      return loanDate >= weekStart && loanDate <= weekEnd
-    })
-
-    const loansDisbursed = weekLoans.length
-    const amountDisbursed = weekLoans.reduce((sum, loan) => sum + loan.loan_amount, 0)
-
-    // Calculate collections in this week
-    const weekPayments = receipts.filter(receipt => {
-      const paymentDate = new Date(receipt.transaction_time)
-      return paymentDate >= weekStart && paymentDate <= weekEnd && receipt.amount > 0
-    })
-
-    const collections = weekPayments.reduce((sum, payment) => sum + payment.amount, 0)
-
-    // Calculate outstanding at end of week (simplified - current outstanding for latest week)
-    const outstanding = i === 0 ? loans.reduce((sum, loan) => sum + (loan.balance || 0), 0) : 0
-
-    trends.push({
-      period: weekLabel,
-      year: currentYear,
-      loans_disbursed: loansDisbursed,
-      amount_disbursed: amountDisbursed,
-      collections,
-      outstanding
-    })
-  }
-
-  return trends
-}
-
-const generateDailyTrends = (loans: Loan[], receipts: Receipts[]): MonthlyTrend[] => {
-  const trends: MonthlyTrend[] = []
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  
-  // Generate data for the past 30 days
-  for (let i = 29; i >= 0; i--) {
-    const targetDate = new Date()
-    targetDate.setDate(targetDate.getDate() - i)
+    const monthLoans = loans.filter(loan => 
+      new Date(loan.created_at).toISOString().slice(0, 7) === monthKey
+    )
     
-    const dayLabel = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-
-    // Calculate loans disbursed on this day
-    const dayLoans = loans.filter(loan => {
-      const loanDate = new Date(loan.start_date)
-      return loanDate.toDateString() === targetDate.toDateString()
-    })
-
-    const loansDisbursed = dayLoans.length
-    const amountDisbursed = dayLoans.reduce((sum, loan) => sum + loan.loan_amount, 0)
-
-    // Calculate collections on this day
-    const dayPayments = receipts.filter(receipt => {
-      const paymentDate = new Date(receipt.transaction_time)
-      return paymentDate.toDateString() === targetDate.toDateString() && receipt.amount > 0
-    })
-
-    const collections = dayPayments.reduce((sum, payment) => sum + payment.amount, 0)
-
-    // Calculate outstanding at end of day (simplified - current outstanding for latest day)
-    const outstanding = i === 0 ? loans.reduce((sum, loan) => sum + (loan.balance || 0), 0) : 0
-
+    const monthPayments = receipts.filter(receipt => 
+      new Date(receipt.transaction_time).toISOString().slice(0, 7) === monthKey
+    )
+    
+    const monthCustomers = customers.filter(customer => 
+      new Date(customer.created_at).toISOString().slice(0, 7) === monthKey
+    )
+    
     trends.push({
-      period: dayLabel,
-      year: currentYear,
-      loans_disbursed: loansDisbursed,
-      amount_disbursed: amountDisbursed,
-      collections,
-      outstanding
+      month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      loans_amount: monthLoans.reduce((sum, loan) => sum + loan.loan_amount, 0),
+      payments_collected: monthPayments.reduce((sum, receipt) => sum + receipt.amount, 0),
+      new_customers: monthCustomers.length
     })
   }
-
+  
   return trends
 }
 
 export const getSystemStatus = async (): Promise<SystemStatus> => {
   try {
     // Test API connectivity
-    await axios.get(`${url}/loan`, { timeout: 5000 })
+    await axios.get(`${url}/loans`, { timeout: 5000 })
     
     return {
       database_connected: true,
