@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseService } from '@/app/lib/database';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 // GET customer by ID
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const customerId = parseInt(params.id);
+    const { id } = await params;
+    const customerId = parseInt(id);
     
     if (isNaN(customerId)) {
       return NextResponse.json(
@@ -40,9 +38,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PUT update customer
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const customerId = parseInt(params.id);
+    const { id } = await params;
+    const customerId = parseInt(id);
     
     if (isNaN(customerId)) {
       return NextResponse.json(
@@ -77,9 +79,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE customer
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const customerId = parseInt(params.id);
+    const { id } = await params;
+    const customerId = parseInt(id);
     
     if (isNaN(customerId)) {
       return NextResponse.json(
