@@ -343,7 +343,7 @@ export class SupabaseDatabaseService {
     }
     
     const { data, error } = await supabase
-      .from('user')
+      .from('users')
       .select('*')
       .order('created_at', { ascending: false });
     
@@ -363,7 +363,7 @@ export class SupabaseDatabaseService {
     }
     
     const { data, error } = await supabase
-      .from('user')
+      .from('users')
       .select('*')
       .eq('username', username)
       .single();
