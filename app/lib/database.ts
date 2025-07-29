@@ -107,123 +107,61 @@ export async function getDatabase(): Promise<Database> {
 
 // Supabase Database (Production)
 async function initializeSupabaseTables(): Promise<void> {
-  if (!supabase) throw new Error('Supabase client not initialized');
+  if (!supabase) {
+    console.error('Supabase client not initialized. Check environment variables:');
+    console.error('- NEXT_PUBLIC_SUPABASE_URL:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.error('- SUPABASE_SERVICE_ROLE_KEY:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    throw new Error('Supabase client not initialized. Please check your environment variables.');
+  }
 
   try {
-    // Create users table - matches current SQLite structure
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS users (
-          account_id SERIAL PRIMARY KEY,
-          account_name TEXT NOT NULL,
-          username TEXT NOT NULL UNIQUE,
-          password TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-    });
-
-    // Create customers table - matches current SQLite structure
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS customers (
-          customer_id SERIAL PRIMARY KEY,
-          first_name TEXT NOT NULL,
-          middle_name TEXT NOT NULL,
-          last_name TEXT NOT NULL,
-          contact TEXT NOT NULL,
-          address TEXT NOT NULL,
-          birthdate TEXT NOT NULL,
-          status TEXT DEFAULT 'Recently Added',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-    });
-
-    // Create loan table - matches current SQLite structure
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS loan (
-          loan_id SERIAL PRIMARY KEY,
-          customer_id INTEGER NOT NULL,
-          loan_start DATE NOT NULL,
-          months INTEGER NOT NULL,
-          loan_end DATE NOT NULL,
-          transaction_date DATE NOT NULL,
-          loan_amount REAL NOT NULL,
-          interest REAL NOT NULL,
-          gross_receivable REAL NOT NULL,
-          payday_payment REAL NOT NULL,
-          service REAL NOT NULL,
-          balance REAL NOT NULL,
-          adjustment REAL NOT NULL,
-          overall_balance REAL NOT NULL,
-          penalty REAL DEFAULT 0,
-          status TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
-        )
-      `
-    });
-
-    // Create receipt table - matches current SQLite structure
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS receipt (
-          pay_id SERIAL PRIMARY KEY,
-          loan_id INTEGER NOT NULL,
-          to_pay REAL NOT NULL,
-          original_to_pay REAL,
-          schedule TEXT NOT NULL,
-          amount REAL NOT NULL,
-          transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          status TEXT NOT NULL DEFAULT 'Not Paid',
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_loan FOREIGN KEY (loan_id) REFERENCES loan(loan_id) ON DELETE CASCADE
-        )
-      `
-    });
-
-    // Create payment_history table - matches current SQLite structure
-    await supabase.rpc('exec_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS payment_history (
-          history_id SERIAL PRIMARY KEY,
-          loan_id INTEGER NOT NULL,
-          pay_id INTEGER NOT NULL,
-          amount REAL NOT NULL,
-          payment_method TEXT NOT NULL,
-          notes TEXT NOT NULL,
-          transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_payment_loan FOREIGN KEY (loan_id) REFERENCES loan(loan_id) ON DELETE CASCADE,
-          CONSTRAINT fk_payment_receipt FOREIGN KEY (pay_id) REFERENCES receipt(pay_id) ON DELETE CASCADE
-        )
-      `
-    });
+    // Try to create tables using direct SQL execution (if RPC is available)
+    try {
+      await supabase.rpc('exec_sql', {
+        sql: `
+          CREATE TABLE IF NOT EXISTS users (
+            account_id SERIAL PRIMARY KEY,
+            account_name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `
+      });
+    } catch (rpcError) {
+      console.log('RPC exec_sql not available, tables must be created manually');
+      console.log('Please run the SQL script from supabase_schema.sql in your Supabase dashboard');
+    }
 
     // Create default admin user if it doesn't exist
-    const { data: existingAdmin } = await supabase
+    const { data: existingAdmin, error: checkError } = await supabase
       .from('users')
       .select('username')
       .eq('username', 'admin')
       .single();
 
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Error checking for admin user:', checkError);
+    }
+
     if (!existingAdmin) {
-      await supabase
+      const { error: insertError } = await supabase
         .from('users')
         .insert([
           { account_name: 'admin', username: 'admin', password: 'admin' }
         ]);
-      console.log('✅ Default admin user created');
+      
+      if (insertError) {
+        console.error('Error creating admin user:', insertError);
+      } else {
+        console.log('✅ Default admin user created');
+      }
     } else {
       console.log('✅ Admin user already exists');
     }
   } catch (error) {
     console.error('Error initializing Supabase tables:', error);
-    // If RPC doesn't work, we'll rely on manual table creation via Supabase dashboard
     console.log('ℹ️ Please create tables manually in Supabase dashboard using the provided SQL script');
   }
 }

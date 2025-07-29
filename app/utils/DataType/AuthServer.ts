@@ -18,6 +18,7 @@ export interface ChangePasswordRequest {
     newPassword: string;
 }
 
+// Type guard to check if error is an axios error
 const isAxiosError = (error: unknown): error is { response?: { data?: { error?: string } }; request?: unknown; message?: string } => {
     return typeof error === 'object' && error !== null && ('response' in error || 'request' in error);
 }
@@ -30,17 +31,15 @@ export const loginUser = async (data: LoginRequest): Promise<LoginResponse> => {
             throw new Error('Invalid response from server');
         }
         
-        const tokenPayload = {
-            account_id: response.data.user.account_id,
-            username: response.data.user.username,
-            exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60 
-        };
+        // The API now returns a proper JWT token
+        const token = response.data.token;
         
-        // Use a more robust base64 encoding
-        const mockToken = btoa(JSON.stringify(tokenPayload));
+        if (!token) {
+            throw new Error('No token received from server');
+        }
         
         return {
-            token: mockToken,
+            token: token,
             message: "Login successful"
         };
     } catch (err: unknown) {

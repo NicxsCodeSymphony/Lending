@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS payment_history CASCADE;
 DROP TABLE IF EXISTS receipt CASCADE;
 DROP TABLE IF EXISTS loan CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
-DROP TABLE IF EXISTS "user" CASCADE;
+DROP TABLE IF EXISTS "users" CASCADE;
 
 CREATE TABLE "users" (
   account_id SERIAL PRIMARY KEY,
@@ -77,8 +77,8 @@ CREATE TABLE payment_history (
   CONSTRAINT fk_payment_receipt FOREIGN KEY (pay_id) REFERENCES receipt(pay_id) ON DELETE CASCADE
 );
 
--- Create default admin user (matches current SQLite setup)
-INSERT INTO "user" (account_name, username, password) 
+-- Create default admin users (matches current SQLite setup)
+INSERT INTO "users" (account_name, username, password) 
 VALUES ('admin', 'admin', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
@@ -92,14 +92,14 @@ CREATE INDEX idx_payment_history_loan_id ON payment_history(loan_id);
 CREATE INDEX idx_payment_history_transaction_time ON payment_history(transaction_time DESC);
 
 -- Enable Row Level Security (RLS) for production security
-ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loan ENABLE ROW LEVEL SECURITY;
 ALTER TABLE receipt ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_history ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies (allow all operations for now - customize as needed)
-CREATE POLICY "Allow all operations on user" ON "user" FOR ALL USING (true);
+CREATE POLICY "Allow all operations on users" ON "users" FOR ALL USING (true);
 CREATE POLICY "Allow all operations on customers" ON customers FOR ALL USING (true);
 CREATE POLICY "Allow all operations on loan" ON loan FOR ALL USING (true);
 CREATE POLICY "Allow all operations on receipt" ON receipt FOR ALL USING (true);
@@ -115,7 +115,7 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for automatic updated_at
-CREATE TRIGGER update_user_updated_at BEFORE UPDATE ON "user" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON "users" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_loan_updated_at BEFORE UPDATE ON loan FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_receipt_updated_at BEFORE UPDATE ON receipt FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -129,5 +129,5 @@ GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, se
 SELECT table_name, column_name, data_type, is_nullable, column_default
 FROM information_schema.columns 
 WHERE table_schema = 'public' 
-AND table_name IN ('user', 'customers', 'loan', 'receipt', 'payment_history')
+AND table_name IN ('users', 'customers', 'loan', 'receipt', 'payment_history')
 ORDER BY table_name, ordinal_position;
