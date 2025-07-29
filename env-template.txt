@@ -1,0 +1,14 @@
+# Supabase Configuration Template
+# Copy this content to a file named .env.local and fill in your actual values
+
+# Your Supabase project URL (found in your Supabase dashboard)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+
+# Your Supabase service role key (found in your Supabase dashboard under Settings > API)
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Optional: Force Supabase usage even in development
+# USE_SUPABASE=true
+
+# Note: The NEXT_PUBLIC_ prefix makes the URL available to the client
+# The service role key should be kept secret and only used server-side

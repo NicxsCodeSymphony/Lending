@@ -69,13 +69,24 @@ export interface PaymentHistory {
   transaction_time: string;
 }
 
-// Check if we're in production (Vercel) or development
-const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+// Check if we should use Supabase (production or if explicitly configured)
+const isProduction = process.env.NODE_ENV === 'production' || 
+                    process.env.VERCEL === '1' || 
+                    process.env.USE_SUPABASE === 'true';
 
 // Initialize Supabase client for production
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = isProduction ? createClient(supabaseUrl, supabaseKey) : null;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (isProduction && supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+
+// Log Supabase initialization status
+if (isProduction) {
+  console.log('Supabase initialization:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseKey,
+    clientCreated: !!supabase
+  });
+}
 
 let db: Database | null = null;
 
@@ -323,8 +334,33 @@ async function initializeTables(): Promise<void> {
 
 // Supabase Database Service
 export class SupabaseDatabaseService {
+  async getAllUsers(): Promise<User[]> {
+    if (!supabase) {
+      console.error('Supabase client not initialized. Check environment variables:');
+      console.error('- NEXT_PUBLIC_SUPABASE_URL:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.error('- SUPABASE_SERVICE_ROLE_KEY:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+      throw new Error('Supabase client not initialized. Please check your environment variables.');
+    }
+    
+    const { data, error } = await supabase
+      .from('user')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Supabase getAllUsers error:', error);
+      throw error;
+    }
+    return data as User[];
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
-    if (!supabase) throw new Error('Supabase client not initialized');
+    if (!supabase) {
+      console.error('Supabase client not initialized. Check environment variables:');
+      console.error('- NEXT_PUBLIC_SUPABASE_URL:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.error('- SUPABASE_SERVICE_ROLE_KEY:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+      throw new Error('Supabase client not initialized. Please check your environment variables.');
+    }
     
     const { data, error } = await supabase
       .from('user')
@@ -332,7 +368,10 @@ export class SupabaseDatabaseService {
       .eq('username', username)
       .single();
     
-    if (error) return undefined;
+    if (error) {
+      console.error('Supabase getUserByUsername error:', error);
+      return undefined;
+    }
     return data as User;
   }
 
@@ -340,13 +379,24 @@ export class SupabaseDatabaseService {
     if (!supabase) throw new Error('Supabase client not initialized');
     
     const { data, error } = await supabase
-      .from('user')
+      .from('users')
       .insert([userData])
       .select('account_id')
       .single();
     
     if (error) throw error;
     return data.account_id;
+  }
+
+  async updateUser(accountId: number, userData: Partial<Omit<User, 'account_id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    if (!supabase) throw new Error('Supabase client not initialized');
+    
+    const { error } = await supabase
+      .from('users')
+      .update({ ...userData, updated_at: new Date().toISOString() })
+      .eq('account_id', accountId);
+    
+    if (error) throw error;
   }
 
   async getAllCustomers(): Promise<Customer[]> {
@@ -615,6 +665,10 @@ export class DatabaseService {
     this.db = database;
   }
 
+  async getAllUsers(): Promise<User[]> {
+    return await this.db.all('SELECT * FROM user ORDER BY created_at DESC') as User[];
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     return await this.db.get('SELECT * FROM user WHERE username = ?', [username]) as User | undefined;
   }
@@ -625,6 +679,17 @@ export class DatabaseService {
       [userData.account_name, userData.username, userData.password]
     );
     return result.lastID!;
+  }
+
+  async updateUser(accountId: number, userData: Partial<Omit<User, 'account_id' | 'created_at' | 'updated_at'>>): Promise<void> {
+    const fields = Object.keys(userData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(userData);
+    values.push(accountId.toString());
+    
+    await this.db.run(
+      `UPDATE user SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE account_id = ?`,
+      values
+    );
   }
 
   async getAllCustomers(): Promise<Customer[]> {
