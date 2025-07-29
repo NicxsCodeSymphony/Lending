@@ -7,6 +7,11 @@ import { loginUser } from '../utils/DataType/AuthServer'
 const decodeJWT = (token: string) => {
   try {
     const base64Url = token.split('.')[1]
+    if (!base64Url) {
+      console.error('Invalid JWT token format');
+      return null;
+    }
+    
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
     const jsonPayload = decodeURIComponent(
       atob(base64)
@@ -75,8 +80,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           
           if (jwtPayload.exp > currentTime) {
             // Token is still valid
-            const parsedUser = JSON.parse(savedUser)
-            setUser(parsedUser)
+            try {
+              const parsedUser = JSON.parse(savedUser)
+              setUser(parsedUser)
+            } catch (parseError) {
+              console.error('Failed to parse saved user data:', parseError)
+              localStorage.removeItem('lendingAppUser')
+              localStorage.removeItem('lendingAppToken')
+            }
           } else {
             // Token is expired
             console.log('JWT token expired, logging out')
@@ -84,15 +95,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem('lendingAppToken')
           }
         } else {
-          // Invalid token format
-          const parsedUser = JSON.parse(savedUser)
-          setUser(parsedUser)
+          // Invalid token format, try to use saved user data
+          try {
+            const parsedUser = JSON.parse(savedUser)
+            setUser(parsedUser)
+          } catch (parseError) {
+            console.error('Failed to parse saved user data:', parseError)
+            localStorage.removeItem('lendingAppUser')
+            localStorage.removeItem('lendingAppToken')
+          }
         }
       }
     } catch (error) {
-      console.error('Failed to parse saved user data:', error)
-      localStorage.removeItem('lendingAppUser')
-      localStorage.removeItem('lendingAppToken')
+      console.error('Failed to check authentication:', error)
+      // Clear potentially corrupted data
+      try {
+        localStorage.removeItem('lendingAppUser')
+        localStorage.removeItem('lendingAppToken')
+      } catch (storageError) {
+        console.error('Failed to clear localStorage:', storageError)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -108,7 +130,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Decode JWT to get user information
       const jwtPayload = decodeJWT(response.token)
       
-      // Create user data structure from JWT payload
+      if (!jwtPayload) {
+        throw new Error('Failed to decode authentication token');
+      }
+      
+      // Create user data structure from JWT payload with fallbacks
       const userData: User = {
         account_id: jwtPayload?.account_id || 1,
         account_name: jwtPayload?.username || username,
@@ -116,9 +142,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         role: 'admin' // Default role, could be enhanced later
       }
       
-      // Save to localStorage
-      localStorage.setItem('lendingAppUser', JSON.stringify(userData))
-      localStorage.setItem('lendingAppToken', response.token)
+      // Save to localStorage with error handling
+      try {
+        localStorage.setItem('lendingAppUser', JSON.stringify(userData))
+        localStorage.setItem('lendingAppToken', response.token)
+      } catch (storageError) {
+        console.error('Failed to save to localStorage:', storageError)
+        // Continue without localStorage if it fails (e.g., in private browsing)
+      }
       
       setUser(userData)
     } catch (error: unknown) {

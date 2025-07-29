@@ -110,10 +110,10 @@ async function initializeSupabaseTables(): Promise<void> {
   if (!supabase) throw new Error('Supabase client not initialized');
 
   try {
-    // Create user table - matches current SQLite structure
+    // Create users table - matches current SQLite structure
     await supabase.rpc('exec_sql', {
       sql: `
-        CREATE TABLE IF NOT EXISTS "user" (
+        CREATE TABLE IF NOT EXISTS users (
           account_id SERIAL PRIMARY KEY,
           account_name TEXT NOT NULL,
           username TEXT NOT NULL UNIQUE,
@@ -206,14 +206,14 @@ async function initializeSupabaseTables(): Promise<void> {
 
     // Create default admin user if it doesn't exist
     const { data: existingAdmin } = await supabase
-      .from('user')
+      .from('users')
       .select('username')
       .eq('username', 'admin')
       .single();
 
     if (!existingAdmin) {
       await supabase
-        .from('user')
+        .from('users')
         .insert([
           { account_name: 'admin', username: 'admin', password: 'admin' }
         ]);
@@ -231,7 +231,7 @@ async function initializeSupabaseTables(): Promise<void> {
 async function initializeTables(): Promise<void> {
   if (!db) throw new Error('Database not initialized');
 
-  // Create user table
+  // Create users table
   await db.run(`
     CREATE TABLE IF NOT EXISTS users (
       account_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -666,16 +666,16 @@ export class DatabaseService {
   }
 
   async getAllUsers(): Promise<User[]> {
-    return await this.db.all('SELECT * FROM user ORDER BY created_at DESC') as User[];
+    return await this.db.all('SELECT * FROM users ORDER BY created_at DESC') as User[];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return await this.db.get('SELECT * FROM user WHERE username = ?', [username]) as User | undefined;
+    return await this.db.get('SELECT * FROM users WHERE username = ?', [username]) as User | undefined;
   }
 
   async createUser(userData: Omit<User, 'account_id' | 'created_at' | 'updated_at'>): Promise<number> {
     const result = await this.db.run(
-      'INSERT INTO user (account_name, username, password) VALUES (?, ?, ?)',
+      'INSERT INTO users (account_name, username, password) VALUES (?, ?, ?)',
       [userData.account_name, userData.username, userData.password]
     );
     return result.lastID!;
@@ -687,7 +687,7 @@ export class DatabaseService {
     values.push(accountId.toString());
     
     await this.db.run(
-      `UPDATE user SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE account_id = ?`,
+      `UPDATE users SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE account_id = ?`,
       values
     );
   }

@@ -4,8 +4,7 @@ DROP TABLE IF EXISTS loan CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
 DROP TABLE IF EXISTS "user" CASCADE;
 
--- Create user table (matches current SQLite structure)
-CREATE TABLE "user" (
+CREATE TABLE "users" (
   account_id SERIAL PRIMARY KEY,
   account_name TEXT NOT NULL,
   username TEXT NOT NULL UNIQUE,
