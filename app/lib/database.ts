@@ -233,7 +233,7 @@ async function initializeTables(): Promise<void> {
 
   // Create user table
   await db.run(`
-    CREATE TABLE IF NOT EXISTS user (
+    CREATE TABLE IF NOT EXISTS users (
       account_id INTEGER PRIMARY KEY AUTOINCREMENT,
       account_name TEXT NOT NULL,
       username TEXT NOT NULL UNIQUE,
@@ -317,13 +317,13 @@ async function initializeTables(): Promise<void> {
 
   // Create default admin user if it doesn't exist
   const existingAdmin = await db.get<User>(
-    'SELECT username FROM user WHERE username = ?',
+    'SELECT username FROM users WHERE username = ?',
     ['admin']
   );
 
   if (!existingAdmin) {
     await db.run(
-      'INSERT INTO user (account_name, username, password) VALUES (?, ?, ?)',
+      'INSERT INTO users (account_name, username, password) VALUES (?, ?, ?)',
       ['admin', 'admin', 'admin']
     );
     console.log('✅ Default admin user created');
