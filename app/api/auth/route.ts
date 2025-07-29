@@ -13,7 +13,31 @@ export async function POST(request: NextRequest) {
     }
 
     const dbService = await getDatabaseService();
+    
+    // Debug: Check if we're using SQLite or PostgreSQL
+    console.log('Database service type:', dbService.constructor.name);
+    
+    // Ensure admin user exists (for development)
+    if (dbService.constructor.name === 'DatabaseService') {
+      try {
+        const existingAdmin = await dbService.getUserByUsername('admin');
+        if (!existingAdmin) {
+          console.log('Creating admin user...');
+          await dbService.createUser({
+            account_name: 'admin',
+            username: 'admin',
+            password: 'admin'
+          });
+          console.log('✅ Admin user created successfully');
+        }
+      } catch (error) {
+        console.log('Error ensuring admin user exists:', error);
+      }
+    }
+    
     const user = await dbService.getUserByUsername(username);
+
+    console.log("Users from database: ", user);
 
     if (!user || user.password !== password) {
       return NextResponse.json(
@@ -22,13 +46,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In a real application, you would hash passwords and use JWT tokens
+    // Return user data that matches the AuthContext interface
     return NextResponse.json({
       success: true,
       user: {
         account_id: user.account_id,
         account_name: user.account_name,
-        username: user.username
+        username: user.username,
+        role: 'admin' // Add the role field back
       }
     });
 
