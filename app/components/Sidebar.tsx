@@ -26,26 +26,43 @@ import {
   RefreshCw,
   ChevronDown,
   User,
-  LogOut,
   Activity,
   X,
   HelpCircle,
   Star,
   TrendingUp,
   Shield,
-  Zap
+  Zap,
+  LogOut
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
+import AuthServer from "@/lib/AuthServer"
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [hasInitialized, setHasInitialized] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await AuthServer.logout()
+      router.push('/')
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error('Logout error:', err.message)
+      } else {
+        console.error('Unexpected logout error')
+      }
+      // Even if logout fails, redirect to home page
+      router.push('/')
+    }
+  }
 
   // Simulate online status
   useEffect(() => {
@@ -60,9 +77,7 @@ export function Sidebar() {
     setHasInitialized(true)
   }, [])
 
-  const handleLogout = () => {
-    console.log("Logout clicked")
-  }
+
 
   const isActive = (path: string) => {
     if (!pathname) return false
@@ -298,7 +313,10 @@ export function Sidebar() {
                   Help & Support
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border/50" />
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors duration-200">
+                <DropdownMenuItem 
+                  onClick={handleLogout}
+                  className="cursor-pointer hover:bg-red-500/10 text-red-600 hover:text-red-700 transition-colors duration-200"
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Logout
                 </DropdownMenuItem>
