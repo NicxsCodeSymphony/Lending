@@ -12,15 +12,36 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import AuthServer from "@/lib/AuthServer"
 
 export default function Login() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const router = useRouter()
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await AuthServer.checkAuth()
+        if (user) {
+          console.log("User already authenticated, redirecting to dashboard")
+          router.push("/dashboard")
+        }
+      } catch (err: unknown) {
+        // User is not authenticated, stay on login page
+        console.log("User not authenticated")
+      } finally {
+        setIsCheckingAuth(false)
+      }
+    }
+
+    checkAuth()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,22 +49,10 @@ export default function Login() {
     setError("")
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed")
-      }
+      const loginResponse = await AuthServer.login({ username, password })
 
       // Login successful
-      console.log("Login successful:", data.user)
+      console.log("Login successful:", loginResponse.user)
       router.push("/dashboard") 
       
     } catch (err: unknown) {
@@ -55,6 +64,16 @@ export default function Login() {
     } finally {
       setIsLoading(false)
     }
+  }
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-primary mb-2">LendingPro</h1>
+          <p className="text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
