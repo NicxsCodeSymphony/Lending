@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Wallet, Loader2, Calendar, DollarSign, CreditCard, AlertCircle, CheckCircle, Info } from "lucide-react"
+import { Loader2, Calendar, DollarSign, CreditCard, AlertCircle, CheckCircle, Info } from "lucide-react"
 import { format } from "date-fns"
 import { type LendingData } from "@/lib/LendingServer"
 import { paymentServer, type ReceiptRecord } from "@/lib/PaymentServer"
@@ -22,11 +22,9 @@ interface PaymentModalProps {
   onPaymentRecorded: () => void
 }
 
-
-
 const PAYMENT_TYPES = [
   { value: "loan_payment", label: "Loan Payment" },
-  { value: "penalty_payment", label: "Penalty Payment" }
+  { value: "penalty_payment", label: "Penalty Payment", disabled: false }
 ]
 
 const PAYMENT_METHODS = [
@@ -49,12 +47,32 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
     notes: ""
   })
 
-  // Fetch receipts when modal opens
   useEffect(() => {
     if (open) {
       fetchReceipts()
     }
   }, [open, loan.loan_id])
+
+  useEffect(() => {
+    if (receipts.length > 0 && !formData.payment_amount) {
+      const nextUnpaidReceipt = receipts.find(receipt => 
+        receipt.status === 'Pending' || receipt.status === 'Overdue' || receipt.status === 'Partial'
+      )
+      
+      if (nextUnpaidReceipt) {
+        const remainingAmount = nextUnpaidReceipt.to_pay - (nextUnpaidReceipt.amount || 0)
+        if (remainingAmount > 0) {
+          setFormData(prev => ({ ...prev, payment_amount: remainingAmount.toString() }))
+        }
+      }
+    }
+  }, [receipts, formData.payment_amount])
+
+  useEffect(() => {
+    if (formData.payment_type === 'penalty_payment' && loan.penalty <= 0) {
+      setFormData(prev => ({ ...prev, payment_type: 'loan_payment' }))
+    }
+  }, [loan.penalty, formData.payment_type])
 
   const fetchReceipts = async () => {
     setReceiptsLoading(true)
@@ -121,7 +139,6 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
       return `Penalty payment - ${formatCurrency(paymentAmount)}`
     }
 
-    // For loan payments, determine which payment schedules are being paid
     const paymentDistribution = calculatePaymentDistribution(paymentAmount)
     
     if (!paymentDistribution || !paymentDistribution.payments || paymentDistribution.payments.length === 0) {
@@ -206,7 +223,6 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
     try {
       const paymentAmount = parseFloat(formData.payment_amount)
       
-      // Generate default notes if user didn't provide any
       const notes = formData.notes.trim() || generateDefaultNotes(paymentAmount)
       
       let paymentResult;
@@ -228,17 +244,15 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
         )
       }
       
-      // Log the audit trail
       try {
         await auditServer.logLoanAction(
-          1, // actor_id - you might want to get this from user context
-          'admin', // actor_role - you might want to get this from user context
+          1, 
+          'admin', 
           'payment',
           loan.loan_id,
           `${formData.payment_type === 'penalty_payment' ? 'Penalty' : 'Loan'} payment recorded: ₱${paymentAmount} via ${formData.payment_method}`
         );
       } catch (auditError) {
-        // Log audit error but don't fail the payment recording
         console.error('Failed to log audit trail:', auditError);
       }
       
@@ -271,8 +285,9 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="sm">
-            <Wallet className="w-4 h-4" />
+          <Button variant="outline" size="sm" className="flex items-center gap-2 border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 hover:border-green-300">
+            <DollarSign className="w-4 h-4" />
+            <span className="hidden sm:inline">Payment</span>
           </Button>
         </DialogTrigger>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -482,11 +497,19 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
                           <SelectValue placeholder="Select payment type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {PAYMENT_TYPES.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
+                          {PAYMENT_TYPES.map((type) => {
+                            const isDisabled = type.value === 'penalty_payment' && loan.penalty <= 0;
+                            return (
+                              <SelectItem 
+                                key={type.value} 
+                                value={type.value}
+                                disabled={isDisabled}
+                              >
+                                {type.label}
+                                {isDisabled && " (No penalty)"}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -560,91 +583,91 @@ export default function PaymentModal({ loan, onPaymentRecorded }: PaymentModalPr
                   </div>
                 ) : receipts.length > 0 ? (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {receipts
-                      .sort((a, b) => {
-                        // Sort by status priority: Partial > Overdue > Pending > Paid
-                        const statusPriority = { 'Partial': 0, 'Overdue': 1, 'Pending': 2, 'Paid': 3 };
-                        const aPriority = statusPriority[a.status as keyof typeof statusPriority] ?? 4;
-                        const bPriority = statusPriority[b.status as keyof typeof statusPriority] ?? 4;
-                        
-                        if (aPriority !== bPriority) {
-                          return aPriority - bPriority;
-                        }
-                        
-                        // If same status, sort by payment number
-                        return a.payment_number - b.payment_number;
-                      })
-                      .map((receipt) => {
-                        const remainingBalance = receipt.to_pay - receipt.amount;
-                        const _isFullyPaid = receipt.status === 'Paid';
-                        const isPartiallyPaid = receipt.amount > 0 && receipt.amount < receipt.to_pay;
-                        
-                        return (
-                          <div key={receipt.receipt_id} className={`flex items-center justify-between p-3 border rounded-lg ${
-                            receipt.status === 'Partial' ? 'bg-orange-50 border-orange-200' :
-                            receipt.status === 'Overdue' ? 'bg-red-50 border-red-200' :
-                            receipt.status === 'Pending' ? 'bg-blue-50 border-blue-200' :
-                            'bg-green-50 border-green-200'
-                          }`}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                                receipt.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
-                                receipt.status === 'Overdue' ? 'bg-red-100 text-red-800' :
-                                receipt.status === 'Pending' ? 'bg-blue-100 text-blue-800' :
-                                'bg-green-100 text-green-800'
-                              }`}>
-                                {receipt.payment_number}
-                              </div>
-                              <div>
-                                <div className="font-medium">{formatDate(receipt.due_date)}</div>
-                                <div className="text-sm text-gray-600">
-                                  {formatCurrency(receipt.to_pay)}
-                                  {isPartiallyPaid && (
-                                    <span className="text-orange-600 ml-2">
-                                      (Paid: {formatCurrency(receipt.amount)})
-                                    </span>
-                                  )}
-                                </div>
-                                {isPartiallyPaid && (
-                                  <div className="text-xs text-orange-600 font-medium">
-                                    Balance: {formatCurrency(remainingBalance)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {receipt.status === 'Paid' && (
-                                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                  Paid
-                                </Badge>
-                              )}
-                              {receipt.status === 'Overdue' && (
-                                <Badge variant="secondary" className="bg-red-100 text-red-800">
-                                  <AlertCircle className="w-3 h-3 mr-1" />
-                                  Overdue
-                                </Badge>
-                              )}
-                              {receipt.status === 'Pending' && (
-                                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                                  Pending
-                                </Badge>
-                              )}
-                              {receipt.status === 'Partial' && (
-                                <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                                  Partial
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                                         {receipts
+                       .sort((a, b) => {
+                         // Sort by status priority: Partial > Overdue > Pending > Paid
+                         const statusPriority = { 'Partial': 0, 'Overdue': 1, 'Pending': 2, 'Paid': 3 };
+                         const aPriority = statusPriority[a.status as keyof typeof statusPriority] ?? 4;
+                         const bPriority = statusPriority[b.status as keyof typeof statusPriority] ?? 4;
+                         
+                         if (aPriority !== bPriority) {
+                           return aPriority - bPriority;
+                         }
+                         
+                         // If same status, sort by payment number
+                         return a.payment_number - b.payment_number;
+                       })
+                       .map((receipt) => {
+                         const remainingBalance = receipt.to_pay - receipt.amount;
+                         const _isFullyPaid = receipt.status === 'Paid';
+                         const isPartiallyPaid = receipt.amount > 0 && receipt.amount < receipt.to_pay;
+                         
+                         return (
+                           <div key={receipt.receipt_id} className={`flex items-center justify-between p-3 border rounded-lg ${
+                             receipt.status === 'Partial' ? 'bg-orange-50 dark:bg-orange-950/50 border-orange-200 dark:border-orange-800' :
+                             receipt.status === 'Overdue' ? 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800' :
+                             receipt.status === 'Pending' ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800' :
+                             'bg-green-50 dark:bg-green-950/50 border-green-200 dark:border-green-800'
+                           }`}>
+                             <div className="flex items-center gap-3">
+                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                                 receipt.status === 'Partial' ? 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200' :
+                                 receipt.status === 'Overdue' ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200' :
+                                 receipt.status === 'Pending' ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' :
+                                 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                               }`}>
+                                 {receipt.payment_number}
+                               </div>
+                               <div>
+                                 <div className="font-medium dark:text-gray-100">{formatDate(receipt.due_date)}</div>
+                                 <div className="text-sm text-gray-600 dark:text-gray-300">
+                                   {formatCurrency(receipt.to_pay)}
+                                   {isPartiallyPaid && (
+                                     <span className="text-orange-600 dark:text-orange-400 ml-2">
+                                       (Paid: {formatCurrency(receipt.amount)})
+                                     </span>
+                                   )}
+                                 </div>
+                                 {isPartiallyPaid && (
+                                   <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                     Balance: {formatCurrency(remainingBalance)}
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-2">
+                               {receipt.status === 'Paid' && (
+                                 <Badge variant="secondary" className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+                                   <CheckCircle className="w-3 h-3 mr-1" />
+                                   Paid
+                                 </Badge>
+                               )}
+                               {receipt.status === 'Overdue' && (
+                                 <Badge variant="secondary" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
+                                   <AlertCircle className="w-3 h-3 mr-1" />
+                                   Overdue
+                                 </Badge>
+                               )}
+                               {receipt.status === 'Pending' && (
+                                 <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                                   Pending
+                                 </Badge>
+                               )}
+                               {receipt.status === 'Partial' && (
+                                 <Badge variant="secondary" className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">
+                                   Partial
+                                 </Badge>
+                               )}
+                             </div>
+                           </div>
+                         );
+                       })}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <Calendar className="w-8 h-8 text-gray-400 mb-2" />
-                    <p className="text-gray-600 font-medium">No payment schedule found</p>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <Calendar className="w-8 h-8 text-gray-400 dark:text-gray-500 mb-2" />
+                    <p className="text-gray-600 dark:text-gray-300 font-medium">No payment schedule found</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                       Receipt records may not have been created for this loan.
                     </p>
                     <Button 

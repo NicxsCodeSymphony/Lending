@@ -9,23 +9,19 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getLendingData, getLendingStats, type LendingData } from "@/lib/LendingServer"
 import AddLoanModal from "@/components/Modal/AddLoanModal"
-import PaymentModal from "@/components/Modal/PaymentModal"
-import PenaltyModal from "@/components/Modal/PenaltyModal"
+import BulkActionsBar from "@/components/BulkActionsBar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Clock, 
   FileText, 
-  Edit, 
-  Trash2, 
-  MoreHorizontal, 
-  Copy, 
-  Printer, 
   TrendingUp, 
   TrendingDown, 
   DollarSign, 
   CreditCard, 
   Percent, 
   PiggyBank, 
-  Users
+  Users,
+  Filter
 } from "lucide-react"
 import { LucideIcon } from "lucide-react"
 
@@ -45,7 +41,9 @@ interface Stats {
 
 // Constants
 const FILTER_OPTIONS = ["All", "Pending", "Overdue", "Ongoing", "Finished"] as const
+const PAYMENT_SCHEDULE_OPTIONS = ["All", "weekly", "monthly", "5th_20th", "15th_30th", "10th_25th"] as const
 type FilterType = typeof FILTER_OPTIONS[number]
+type PaymentScheduleType = typeof PAYMENT_SCHEDULE_OPTIONS[number]
 
 // Utility functions
 const formatCurrency = (amount: number) => {
@@ -131,34 +129,84 @@ const StatCard = ({
   </motion.div>
 )
 
-const FilterTabs = ({ activeFilter, onFilterChange }: { 
+const FilterDropdown = ({ 
+  label, 
+  options, 
+  value, 
+  onValueChange, 
+  placeholder, 
+  icon: Icon 
+}: {
+  label: string
+  options: { value: string; label: string }[]
+  value: string
+  onValueChange: (value: string) => void
+  placeholder: string
+  icon: LucideIcon
+}) => (
+  <div className="flex items-center space-x-2">
+    <Icon className="w-4 h-4 text-gray-500" />
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger className="h-8 w-[180px] text-xs">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+)
+
+const FilterSection = ({ 
+  activeFilter, 
+  setActiveFilter, 
+  paymentScheduleFilter, 
+  setPaymentScheduleFilter 
+}: {
   activeFilter: FilterType
-  onFilterChange: (filter: FilterType) => void 
+  setActiveFilter: (value: FilterType) => void
+  paymentScheduleFilter: PaymentScheduleType
+  setPaymentScheduleFilter: (value: PaymentScheduleType) => void
 }) => (
   <motion.div 
-    className="flex flex-wrap gap-1 border-b overflow-x-auto"
+    className="flex flex-wrap gap-4 items-center border-b pb-4"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, delay: 0.3 }}
   >
-    {FILTER_OPTIONS.map((filter, index) => (
-      <motion.button
-        key={filter}
-        onClick={() => onFilterChange(filter)}
-        className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
-          activeFilter === filter
-            ? "bg-blue-500 text-white"
-            : "text-gray-600 hover:text-gray-900"
-        }`}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.4 + index * 0.1 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        {filter}
-      </motion.button>
-    ))}
+    <FilterDropdown
+      label="Status"
+      options={[
+        { value: "All", label: "All Status" },
+        { value: "Pending", label: "Pending" },
+        { value: "Overdue", label: "Overdue" },
+        { value: "Ongoing", label: "Ongoing" },
+        { value: "Finished", label: "Finished" },
+      ]}
+      value={activeFilter}
+      onValueChange={(value) => setActiveFilter(value as FilterType)}
+      placeholder="Select status"
+      icon={Filter}
+    />
+    <FilterDropdown
+      label="Payment Schedule"
+      options={[
+        { value: "All", label: "All Schedules" },
+        { value: "weekly", label: "Weekly" },
+        { value: "monthly", label: "Monthly" },
+        { value: "5th_20th", label: "5th & 20th" },
+        { value: "15th_30th", label: "15th & 30th" },
+        { value: "10th_25th", label: "10th & 25th" },
+      ]}
+      value={paymentScheduleFilter}
+      onValueChange={(value) => setPaymentScheduleFilter(value as PaymentScheduleType)}
+      placeholder="Select schedule"
+      icon={Clock}
+    />
   </motion.div>
 )
 
@@ -198,13 +246,12 @@ const LoanTable = ({
             <TableHead className="hidden xl:table-cell">Penalty</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="hidden sm:table-cell">Next Due Date</TableHead>
-            <TableHead>Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {loans.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={12} className="text-center py-8">
+              <TableCell colSpan={11} className="text-center py-8">
                 <motion.div 
                   className="flex flex-col items-center space-y-2"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -228,12 +275,25 @@ const LoanTable = ({
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                   whileHover={{ backgroundColor: "rgba(0, 0, 0, 0.02)" }}
-                  className="border-b"
+                  className={`border-b cursor-pointer transition-colors ${
+                    selectedLoans.includes(loan.loan_id)
+                      ? "bg-blue-50 border-blue-200 hover:bg-blue-100 border-l-4 border-l-blue-500"
+                      : "hover:bg-gray-50"
+                  }`}
+                  onClick={() => {
+                    const isCurrentlySelected = selectedLoans.includes(loan.loan_id)
+                    if (isCurrentlySelected) {
+                      onSelectLoan(loan.loan_id, false)
+                    } else {
+                      onSelectLoan(loan.loan_id, true)
+                    }
+                  }}
                 >
                   <TableCell>
                     <Checkbox
                       checked={selectedLoans.includes(loan.loan_id)}
                       onCheckedChange={(checked) => onSelectLoan(loan.loan_id, checked)}
+                      onClick={(e) => e.stopPropagation()}
                     />
                   </TableCell>
                   <TableCell className="font-medium">#{loan.loan_id}</TableCell>
@@ -256,9 +316,6 @@ const LoanTable = ({
                   <TableCell className="hidden xl:table-cell">{formatCurrency(loan.penalty)}</TableCell>
                   <TableCell><StatusBadge status={loan.status} /></TableCell>
                   <TableCell className="hidden sm:table-cell">{formatDate(loan.loan_end)}</TableCell>
-                  <TableCell>
-                    <LoanActions loan={loan} onLoanAdded={onLoanAdded} />
-                  </TableCell>
                 </motion.tr>
               ))}
             </AnimatePresence>
@@ -268,77 +325,6 @@ const LoanTable = ({
     </div>
   )
 }
-
-const LoanActions = ({ loan, onLoanAdded }: { loan: LendingData; onLoanAdded: () => void }) => {
-  const status = loan.status?.toLowerCase()
-
-  if (status === 'completed') {
-    return <span className="text-sm text-gray-500">No actions</span>
-  }
-
-  return (
-    <div className="flex space-x-1">
-      {status === 'ongoing' ? (
-        <>
-          <PaymentModal loan={loan} onPaymentRecorded={onLoanAdded} />
-          <PenaltyModal loan={loan} onPenaltyUpdated={onLoanAdded} />
-          <Button variant="ghost" size="sm">
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
-        </>
-      ) : (
-        <>
-          <Button variant="ghost" size="sm">
-            <Edit className="w-4 h-4" />
-          </Button>
-          <PaymentModal loan={loan} onPaymentRecorded={onLoanAdded} />
-          <PenaltyModal loan={loan} onPenaltyUpdated={onLoanAdded} />
-          <Button variant="ghost" size="sm">
-            <Trash2 className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm">
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
-        </>
-      )}
-    </div>
-  )
-}
-
-const BulkActionsBar = ({ 
-  selectedCount, 
-  onClearSelection 
-}: { 
-  selectedCount: number
-  onClearSelection: () => void 
-}) => (
-  <AnimatePresence>
-    {selectedCount > 0 && (
-      <motion.div 
-        className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border rounded-lg shadow-lg px-4 py-3 flex items-center space-x-2 z-50"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 50 }}
-        transition={{ duration: 0.3 }}
-      >
-        <span className="text-sm font-medium">{selectedCount} Selected</span>
-        <Button variant="outline" size="sm">
-          <Copy className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Duplicate</span>
-        </Button>
-        <Button variant="outline" size="sm">
-          <Printer className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Print</span>
-        </Button>
-        <Button variant="destructive" size="sm">
-          <Trash2 className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Delete</span>
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onClearSelection}>×</Button>
-      </motion.div>
-    )}
-  </AnimatePresence>
-)
 
 const Pagination = ({ totalItems }: { totalItems: number }) => (
   <motion.div 
@@ -378,7 +364,8 @@ export default function Lending() {
     overdueLoans: 0
   })
   const [selectedLoans, setSelectedLoans] = useState<number[]>([])
-  const [activeFilter, setActiveFilter] = useState<FilterType>("All")
+  const [activeFilter, setActiveFilter] = useState<FilterType>("Ongoing")
+  const [paymentScheduleFilter, setPaymentScheduleFilter] = useState<PaymentScheduleType>("monthly")
   const [loading, setLoading] = useState(true)
 
   const fetchData = async () => {
@@ -420,16 +407,32 @@ export default function Lending() {
   }
 
   const filteredData = lendingData.filter(loan => {
-    if (activeFilter === "All") return true
-    if (activeFilter === "Pending") return loan.status?.toLowerCase() === "pending" || loan.status?.toLowerCase() === "not paid"
-    if (activeFilter === "Overdue") {
+    // Status filter
+    let statusMatch = true
+    if (activeFilter === "All") statusMatch = true
+    else if (activeFilter === "Pending") statusMatch = loan.status?.toLowerCase() === "pending" || loan.status?.toLowerCase() === "not paid"
+    else if (activeFilter === "Overdue") {
       const loanEnd = new Date(loan.loan_end)
       const today = new Date()
-      return loanEnd < today && (loan.status?.toLowerCase() === "pending" || loan.status?.toLowerCase() === "not paid")
+      statusMatch = loanEnd < today && (loan.status?.toLowerCase() === "pending" || loan.status?.toLowerCase() === "not paid")
     }
-    if (activeFilter === "Ongoing") return loan.status?.toLowerCase() === "ongoing" || loan.status?.toLowerCase() === "not paid"
-    if (activeFilter === "Finished") return loan.status?.toLowerCase() === "completed"
-    return true
+    else if (activeFilter === "Ongoing") statusMatch = loan.status?.toLowerCase() === "ongoing" || loan.status?.toLowerCase() === "not paid"
+    else if (activeFilter === "Finished") statusMatch = loan.status?.toLowerCase() === "completed"
+    
+    // Payment schedule filter
+    let scheduleMatch = true
+    if (paymentScheduleFilter !== "All") {
+      // Handle cases where payment_schedule might be missing or null
+      const loanSchedule = loan.payment_schedule || 'monthly'
+      scheduleMatch = loanSchedule.toLowerCase() === paymentScheduleFilter.toLowerCase()
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Loan ${loan.loan_id}: schedule=${loanSchedule}, filter=${paymentScheduleFilter}, match=${scheduleMatch}`)
+      }
+    }
+    
+    return statusMatch && scheduleMatch
   })
 
   if (loading) {
@@ -560,7 +563,12 @@ export default function Lending() {
       </motion.div>
 
       {/* Filter Tabs */}
-      <FilterTabs activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+      <FilterSection
+        activeFilter={activeFilter}
+        setActiveFilter={setActiveFilter}
+        paymentScheduleFilter={paymentScheduleFilter}
+        setPaymentScheduleFilter={setPaymentScheduleFilter}
+      />
 
       {/* Table */}
       <motion.div
@@ -585,6 +593,9 @@ export default function Lending() {
       <BulkActionsBar 
         selectedCount={selectedLoans.length}
         onClearSelection={() => setSelectedLoans([])}
+        selectedLoans={selectedLoans}
+        lendingData={lendingData}
+        onLoanAdded={handleLoanAdded}
       />
 
       {/* Pagination */}

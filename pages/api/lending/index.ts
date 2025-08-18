@@ -19,6 +19,7 @@ interface LoanData {
   overall_balance: number;
   penalty: number;
   status: string;
+  payment_schedule?: string;
   created_at: string;
   updated_at: string;
   customers?: {
@@ -64,6 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           overall_balance: loan.overall_balance,
           penalty: loan.penalty,
           status: loan.status,
+          payment_schedule: loan.payment_schedule || 'monthly',
           created_at: loan.created_at,
           updated_at: loan.updated_at,
           first_name: loan.customers?.first_name || '',

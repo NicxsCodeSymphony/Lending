@@ -15,6 +15,7 @@ export interface LendingData {
   overall_balance: number;
   penalty: number;
   status: string;
+  payment_schedule: string;
   created_at: string;
   updated_at: string;
   first_name: string;

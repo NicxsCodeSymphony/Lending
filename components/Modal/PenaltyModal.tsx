@@ -158,8 +158,9 @@ export default function PenaltyModal({ loan, onPenaltyUpdated }: PenaltyModalPro
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
+        <Button variant="outline" size="sm" className="flex items-center gap-2 border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800 hover:border-orange-300">
           <AlertTriangle className="w-4 h-4" />
+          <span className="hidden sm:inline">Penalty</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
